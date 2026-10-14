@@ -68,6 +68,9 @@ const query = (client: Helia) => async (): Promise<PeerId[]> => {
     const responses = await all(client.libp2p.dht.findProviders(dcid))
     providers = responses.filter(r => r.name === 'PROVIDER') as ProviderEvent[]
     i++
+    if (providers.length === 0 && i < 3) {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
   }
 
   if (i > 0) {
@@ -94,7 +97,18 @@ const query = (client: Helia) => async (): Promise<PeerId[]> => {
 
 // (ipns -> cid)
 // update ipns record
-const publish = (client: Helia, name: IPNS) => async (cid: CID) => await name.publish(client.libp2p.peerId, cid)
+const publish = (client: Helia, name: IPNS) => async (cid: CID) => {
+  let attempts = 0
+  while (attempts < 3) {
+    try {
+      return await name.publish(client.libp2p.peerId, cid)
+    } catch (err) {
+      attempts++
+      if (attempts >= 3) throw err
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+  }
+}
 // resolve ipns record
 const resolve = (name: IPNS) => async (peerId: PeerId) => await name.resolve(peerId)
 
@@ -136,6 +150,8 @@ const updateFor = (client: Helia, name: IPNS, set: Set<string>) => async (...val
   console.log(`${who}: pushed data to pinner`)
   await publish(client, name)(block.cid)
   console.log(`${who}: published ipns:${client.libp2p.peerId} with value cid:${block.cid}`)
+  if (client === client1) (globalThis as any).cid1 = block.cid.toString()
+  else (globalThis as any).cid2 = block.cid.toString()
   await advertise(client)()
   console.log(`${who}: advertised ipns:${client.libp2p.peerId} as set provider`)
 }
