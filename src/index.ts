@@ -149,32 +149,32 @@ const connect = async (client: Helia) => {
   console.log('%s: online', getClientName(client))
 }
 const disconnect = async (client: Helia) => {
-  await client.libp2p.getConnections().forEach(connection => connection.close())
+  await Promise.all(client.libp2p.getConnections().map(connection => connection.close()))
   console.log('%s: offline', getClientName(client))
 }
 
-// client1 comes online, makes changes, and goes offline
-{
-  await connect(client1)
-  await update('nerf this')
-  await disconnect(client1)
-}
+// Run the full automated example only when this file is the entry point.
+if (process.argv[1] && process.argv[1].endsWith('dynamic-content/dist/index.js')) {
+  // client1 comes online, makes changes, and goes offline
+  {
+    await connect(client1)
+    await update('nerf this')
+    await disconnect(client1)
+  }
 
-console.log(`
+  console.log(`
 --- no peers online, Zzzzz ---
 `)
 
-await new Promise(resolve => setTimeout(resolve, 3000))
+  await new Promise(resolve => setTimeout(resolve, 3000))
 
-// client2 comes online, merges changes, and goes offline
-{
-  await connect(client2)
-  await sync()
-  await disconnect(client2)
-}
+  // client2 comes online, merges changes, and goes offline
+  {
+    await connect(client2)
+    await sync()
+    await disconnect(client2)
+  }
 
-// non-interactive example
-if (process.argv[1].endsWith('dynamic-content/dist/index.js')) {
   await Promise.all([
     client1.stop(),
     client2.stop(),

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Dynamic Content — Browser Demo</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; background: #111; color: #eee; }
+  h1 { margin-top: 0; }
+  .row { display: flex; gap: 2rem; flex-wrap: wrap; }
+  .card { background: #1e1e1e; border: 1px solid #333; border-radius: 8px; padding: 1rem; min-width: 280px; flex: 1; }
+  button { padding: .5rem 1rem; margin: .25rem; cursor: pointer; }
+  input { padding: .5rem; width: 100%; box-sizing: border-box; }
+  pre { background: #000; padding: 1rem; border-radius: 6px; overflow: auto; min-height: 120px; }
+  .status { color: #9cdcfe; }
+</style>
+</head>
+<body>
+<h1>Dynamic Content — Browser Interactive Demo</h1>
+<p class="status">Backend (Helia/IPFS nodes) runs in Node; this page drives it.</p>
+
+<div class="row">
+  <div class="card">
+    <h2>Client 1</h2>
+    <button onclick="connect('client1')">Connect</button>
+    <button onclick="disconnect('client1')">Disconnect</button>
+    <p>Connections: <span id="c1conn">0</span></p>
+    <input id="vals" placeholder="comma separated values" />
+    <button onclick="update()">Update</button>
+  </div>
+  <div class="card">
+    <h2>Client 2</h2>
+    <button onclick="connect('client2')">Connect</button>
+    <button onclick="disconnect('client2')">Disconnect</button>
+    <p>Connections: <span id="c2conn">0</span></p>
+    <button onclick="sync()">Sync</button>
+  </div>
+</div>
+
+<h2>State</h2>
+<div class="row">
+  <div class="card"><h3>set1 (client1)</h3><pre id="set1"></pre></div>
+  <div class="card"><h3>set2 (client2)</h3><pre id="set2"></pre></div>
+</div>
+
+<h2>Log</h2>
+<pre id="log"></pre>
+
+<script>
+const logEl = document.getElementById('log');
+function log(msg){ logEl.textContent = msg + '\\n' + logEl.textContent; }
+async function api(path, method='GET', body){
+  const r = await fetch(path, { method, headers: body?{'content-type':'application/json'}:{}, body: body?JSON.stringify(body):undefined });
+  const j = await r.json();
+  if(!j.ok && j.error) log('ERROR: '+j.error);
+  return j;
+}
+function refresh(j){
+  if(!j) return;
+  document.getElementById('set1').textContent = JSON.stringify(j.set1,null,2);
+  document.getElementById('set2').textContent = JSON.stringify(j.set2,null,2);
+  document.getElementById('c1conn').textContent = j.client1Connections;
+  document.getElementById('c2conn').textContent = j.client2Connections;
+}
+async function connect(c){ const j = await api('/api/connect','POST',{client:c}); log('connected '+c); refresh(j); }
+async function disconnect(c){ const j = await api('/api/disconnect','POST',{client:c}); log('disconnected '+c); refresh(j); }
+async function update(){
+  const v = document.getElementById('vals').value;
+  const j = await api('/api/update','POST',{values:v});
+  log('update '+v);
+  refresh(j);
+}
+async function sync(){ const j = await api('/api/sync','POST'); log('sync done'); refresh(j); }
+setInterval(async()=>{ const j = await api('/api/status'); refresh(j); }, 2000);
+api('/api/status').then(refresh);
+</script>
+</body>
+</html>

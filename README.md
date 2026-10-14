@@ -8,6 +8,14 @@ Read the [article](./ARTICLE.md)
 
 Try out the [example](./ARTICLE.md#example)
 
+Run the browser-based interactive demo:
+
+```sh
+npm run web
+```
+
+then open http://localhost:8080
+
 <br/>
 
 ### Questions? Create an [Issue](https://github.com/tabcat/dynamic-content/issues)!

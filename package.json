@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "example": "npm run build && node dist/index.js",
-    "interactive": "npm run build && node dist/interactive.js"
+    "interactive": "npm run build && node dist/interactive.js",
+    "web": "npm run build && node dist/web.js"
   },
   "author": "tabcat <tabcat00@proton.me>",
   "license": "MIT",
