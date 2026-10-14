@@ -46,8 +46,20 @@ const dynamicContent = await DynamicContent({
 const dcid = dynamicContent.id
 
 // (dcid -> ipns)
-// add ipns key as provider for dcid
-const advertise = (client: Helia) => async () => await all(client.libp2p.dht.provide(dcid))
+// add ipns key as provider for dcid with retry logic
+const advertise = (client: Helia) => async () => {
+  let attempts = 0;
+  while (attempts < 3) {
+    try {
+      await all(client.libp2p.dht.provide(dcid));
+      return;
+    } catch (err) {
+      attempts++;
+      if (attempts >= 3) throw err;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+};
 // find providers of dcid to get ipns of collaborators
 const query = (client: Helia) => async () => {
   let i = 0
@@ -131,7 +143,9 @@ const sync = async () => {
 
 const getClientName = (client: Helia) => client === client1 ? 'client1' : 'client2'
 const connect = async (client: Helia) => {
-  await client.libp2p.dialProtocol((server.libp2p.getMultiaddrs())[0], '/ipfs/lan/kad/1.0.0')
+  await client.libp2p.dial((server.libp2p.getMultiaddrs())[0])
+  // allow identify / topology to populate the Kademlia routing table
+  await new Promise(resolve => setTimeout(resolve, 1000))
   console.log('%s: online', getClientName(client))
 }
 const disconnect = async (client: Helia) => {
