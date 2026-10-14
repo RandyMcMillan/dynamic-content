@@ -17,6 +17,8 @@
 <body>
 <h1>Dynamic Content — Browser Interactive Demo</h1>
 <p class="status">Backend (Helia/IPFS nodes) runs in Node; this page drives it.</p>
+<p>set1 (client1) <code id="cid1top">-</code> &nbsp;&nbsp; set2 (client2) <code id="cid2top">-</code></p>
+<p>set1 (client1) state_sha256_hash: <code id="sha1top">-</code> &nbsp;&nbsp; set2 (client2) state_sha256_hash: <code id="sha2top">-</code></p>
 
 <div class="row">
   <div class="card">
@@ -27,6 +29,7 @@
     <input id="vals1" placeholder="client1 values" />
     <button onclick="update('client1')">Update 1</button>
     <button onclick="sync('client1')">Sync 1</button>
+    <button onclick="clearInput('vals1')">Clear</button>
   </div>
   <div class="card">
     <h2>Client 2</h2>
@@ -36,13 +39,34 @@
     <input id="vals2" placeholder="client2 values" />
     <button onclick="update('client2')">Update 2</button>
     <button onclick="sync('client2')">Sync 2</button>
+    <button onclick="clearInput('vals2')">Clear</button>
   </div>
 </div>
 
 <h2>State</h2>
+<p><button onclick="resetState()">Reset State</button></p>
 <div class="row">
-  <div class="card"><h3>set1 (client1)</h3><pre id="set1"></pre></div>
-  <div class="card"><h3>set2 (client2)</h3><pre id="set2"></pre></div>
+  <div class="card">
+    <h3>set1 (client1)</h3>
+    <p>state_sha256_hash: <code id="sha1">-</code></p>
+    <p>CID: <code id="cid1">-</code></p>
+    <pre id="set1"></pre>
+    <p>IPNS: <code id="ipns1">-</code></p>
+  </div>
+  <div class="card">
+    <h3>set2 (client2)</h3>
+    <p>state_sha256_hash: <code id="sha2">-</code></p>
+    <p>CID: <code id="cid2">-</code></p>
+    <pre id="set2"></pre>
+    <p>IPNS: <code id="ipns2">-</code></p>
+  </div>
+</div>
+
+<h2>IPFS info</h2>
+<div class="card">
+  <p>client1 PeerID: <code id="peer1">-</code> (connections: <span id="c1conn2">0</span>)</p>
+  <p>client2 PeerID: <code id="peer2">-</code> (connections: <span id="c2conn2">0</span>)</p>
+  <p>server: <code id="serverma">-</code></p>
 </div>
 
 <h2>Log</h2>
@@ -61,8 +85,23 @@ function refresh(j){
   if(!j) return;
   document.getElementById('set1').textContent = JSON.stringify(j.set1,null,2);
   document.getElementById('set2').textContent = JSON.stringify(j.set2,null,2);
+  document.getElementById('cid1').textContent = j.cid1 || '-';
+  document.getElementById('cid2').textContent = j.cid2 || '-';
+  document.getElementById('sha1').textContent = j.sha256Set1 || '-';
+  document.getElementById('sha2').textContent = j.sha256Set2 || '-';
+  document.getElementById('cid1top').textContent = j.cid1 || '-';
+  document.getElementById('cid2top').textContent = j.cid2 || '-';
+  document.getElementById('sha1top').textContent = j.sha256Set1 || '-';
+  document.getElementById('sha2top').textContent = j.sha256Set2 || '-';
+  document.getElementById('ipns1').textContent = j.ipns1 || '-';
+  document.getElementById('ipns2').textContent = j.ipns2 || '-';
+  document.getElementById('peer1').textContent = j.client1PeerId || '-';
+  document.getElementById('peer2').textContent = j.client2PeerId || '-';
   document.getElementById('c1conn').textContent = j.client1Connections;
   document.getElementById('c2conn').textContent = j.client2Connections;
+  document.getElementById('c1conn2').textContent = j.client1Connections;
+  document.getElementById('c2conn2').textContent = j.client2Connections;
+  document.getElementById('serverma').textContent = (j.serverMultiaddrs||[]).join(', ') || '-';
 }
 async function connect(c){ const j = await api('/api/connect','POST',{client:c}); log('connected '+c); refresh(j); }
 async function disconnect(c){ const j = await api('/api/disconnect','POST',{client:c}); log('disconnected '+c); refresh(j); }
@@ -78,8 +117,14 @@ async function sync(client){
   log('sync '+client+' done');
   refresh(j);
 }
-setInterval(async()=>{ const j = await api('/api/status'); refresh(j); }, 2000);
+function clearInput(id){ document.getElementById(id).value = ''; }
+async function resetState(){
+  const j = await api('/api/reset','POST');
+  log('state reset');
+  refresh(j);
+}
 api('/api/status').then(refresh);
+setInterval(async()=>{ const j = await api('/api/status'); refresh(j); }, 2000);
 </script>
 </body>
 </html>
