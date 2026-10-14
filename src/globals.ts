@@ -12,8 +12,14 @@ declare global {
   var dynamicContent: Awaited<ReturnType<typeof DynamicContent>>
   var set1: Set<any>
   var set2: Set<any>
-  var update: (value: string) => Promise<void>
+  var cid1: string
+  var cid2: string
+  var update: (...values: string[]) => Promise<void>
   var sync: () => Promise<void>
+  var update1: (...values: string[]) => Promise<void>
+  var update2: (...values: string[]) => Promise<void>
+  var sync1: () => Promise<void>
+  var sync2: () => Promise<void>
   var connect: (client: Helia) => Promise<void>
   var disconnect: (client: Helia) => Promise<void>
   var help: string

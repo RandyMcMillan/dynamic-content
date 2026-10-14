@@ -61,10 +61,10 @@ const advertise = (client: Helia) => async () => {
   }
 };
 // find providers of dcid to get ipns of collaborators
-const query = (client: Helia) => async () => {
+const query = (client: Helia) => async (): Promise<PeerId[]> => {
   let i = 0
   let providers: ProviderEvent[] = []
-  while (providers.length === 0 && i <3 /* u */) {
+  while (providers.length === 0 && i < 3) {
     const responses = await all(client.libp2p.dht.findProviders(dcid))
     providers = responses.filter(r => r.name === 'PROVIDER') as ProviderEvent[]
     i++
@@ -77,8 +77,19 @@ const query = (client: Helia) => async () => {
   if (i === 3) {
     throw new Error('cannot find providers')
   }
-  
-  return providers[0].providers[0].id
+
+  // Collect every advertised provider, so all collaborators can be synced.
+  const peerIds = new Map<string, PeerId>()
+  for (const evt of providers) {
+    for (const p of evt.providers) {
+      peerIds.set(p.id.toString(), p.id)
+    }
+  }
+  const result = [...peerIds.values()]
+  if (result.length === 0) {
+    throw new Error('cannot find providers')
+  }
+  return result
 }
 
 // (ipns -> cid)
@@ -96,7 +107,7 @@ const pull = (client: Helia) => async (cid: CID) => await client.blockstore.get(
 // (data -> set)
 // encode set to ipld
 const encode = async (s: Set<string>) =>
-  await Block.encode<string[], 113, 18>({ value: Array.from(set1), codec, hasher })
+  await Block.encode<string[], 113, 18>({ value: Array.from(s), codec, hasher })
 // decode set from ipld
 const decode = async (bytes: Uint8Array) =>
   new Set((await Block.decode<string[], 113, 18>({ bytes, codec, hasher })).value)
@@ -110,42 +121,62 @@ const merge = (l: Set<string>, r: Set<string>) => r.forEach(l.add.bind(l))
 const set1: Set<string> = new Set()
 const set2: Set<string> = new Set()
 
-// write to client1
-const update = async (...values: string[]) => {
-  const diff = Array.from(values).filter(value => !set1.has(value))
-  for (const value of values) { add(set1)(value) }
-  console.log(`client1: added new values to set { ${diff.join(', ')} }`)
-  console.log(`client1: set state: { ${Array.from(set1).join(', ')} }`)
-  const block = await encode(set1)
-  console.log(`client1: encoded to raw data`)
+const getClientName = (client: Helia) => client === client1 ? 'client1' : 'client2'
+
+// Generic write path: any client can publish its own replica.
+const updateFor = (client: Helia, name: IPNS, set: Set<string>) => async (...values: string[]) => {
+  const who = getClientName(client)
+  const diff = Array.from(values).filter(value => !set.has(value))
+  for (const value of values) { add(set)(value) }
+  console.log(`${who}: added new values to set { ${diff.join(', ')} }`)
+  console.log(`${who}: set state: { ${Array.from(set).join(', ')} }`)
+  const block = await encode(set)
+  console.log(`${who}: encoded to raw data`)
   await push(block)
-  console.log(`client1: pushed data to pinner`)
-  await publish(client1, name1)(block.cid)
-  console.log(`client1: published ipns:${client1.libp2p.peerId} with value cid:${block.cid}`)
-  await advertise(client1)()
-  console.log(`client1: advertised ipns:${client1.libp2p.peerId} as set provider`)
-}
-// sync to client2
-const sync = async () => {
-  const peerId = await query(client2)()
-  console.log(`client2: found ipns:${peerId} as set provider`)
-  const cid = await resolve(name2)(peerId)
-  console.log(`client2: resolved ipns:${peerId} to ${cid}`)
-  const bytes = await pull(client2)(cid)
-  console.log(`client2: resolved ipfs:${cid} to raw data`)
-  const set1 = await decode(bytes)
-  console.log(`client2: decoded raw data`)
-  const diff = Array.from(set1).filter(value => !set2.has(value))
-  merge(set2, set1)
-  console.log(`client2: added new values to set { ${diff.join(', ')} }`)
-  console.log(`client2: set state: { ${Array.from(set2).join(', ')} }`)
+  console.log(`${who}: pushed data to pinner`)
+  await publish(client, name)(block.cid)
+  console.log(`${who}: published ipns:${client.libp2p.peerId} with value cid:${block.cid}`)
+  await advertise(client)()
+  console.log(`${who}: advertised ipns:${client.libp2p.peerId} as set provider`)
 }
 
-const getClientName = (client: Helia) => client === client1 ? 'client1' : 'client2'
+// Generic read path: merge changes from ALL discovered collaborators.
+const syncFor = (client: Helia, name: IPNS, set: Set<string>) => async () => {
+  const who = getClientName(client)
+  const peerIds = await query(client)()
+  console.log(`${who}: found ${peerIds.length} provider(s)`)
+  for (const peerId of peerIds) {
+    if (peerId.toString() === client.libp2p.peerId.toString()) continue
+    try {
+      const cid = await resolve(name)(peerId)
+      console.log(`${who}: resolved ipns:${peerId} to ${cid}`)
+      const bytes = await pull(client)(cid)
+      console.log(`${who}: resolved ipfs:${cid} to raw data`)
+      const remote = await decode(bytes)
+      console.log(`${who}: decoded raw data`)
+      const diff = Array.from(remote).filter(value => !set.has(value))
+      merge(set, remote)
+      console.log(`${who}: added new values to set { ${diff.join(', ')} }`)
+    } catch (err: any) {
+      console.log(`${who}: could not sync provider ${peerId}: ${err?.message ?? err}`)
+    }
+  }
+  console.log(`${who}: set state: { ${Array.from(set).join(', ')} }`)
+}
+
+const update1 = updateFor(client1, name1, set1)
+const update2 = updateFor(client2, name2, set2)
+const sync1 = syncFor(client1, name1, set1)
+const sync2 = syncFor(client2, name2, set2)
+
+// Backwards-compatible globals used by the original example/docs.
+const update = update1
+const sync = sync2
+
 const connect = async (client: Helia) => {
   await client.libp2p.dial((server.libp2p.getMultiaddrs())[0])
   // allow identify / topology to populate the Kademlia routing table
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  await new Promise(resolve => setTimeout(resolve, 2000))
   console.log('%s: online', getClientName(client))
 }
 const disconnect = async (client: Helia) => {
@@ -193,5 +224,9 @@ global.set2 = set2
 global.dynamicContent = dynamicContent
 global.update = update
 global.sync = sync
+global.update1 = update1
+global.update2 = update2
+global.sync1 = sync1
+global.sync2 = sync2
 global.connect = connect
 global.disconnect = disconnect
